@@ -15,6 +15,7 @@
 //  Foundation, Inc.,
 //  51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+#include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <getopt.h>
@@ -40,7 +41,7 @@ char *retnames[] = {
 enum types { FLOAT, HEX, BOTH };
 enum operations { NONE, NORM, ADD, SUB, MUL, DIV };
 char *opnames[] = { "none", "norm", "add", "sub", "mul", "div" };
-
+int verbose = 0;
 struct awp *awp;
 
 struct num {
@@ -69,17 +70,22 @@ void usage()
 {
 	printf(
 		"Usage:\n\n"
-		"   emawp <arg>          : convert and print argument\n"
-		"   emawp -n <arg>       : normalize\n"
-		"   emawp -a <arg> <arg> : add\n"
-		"   emawp -s <arg> <arg> : subtract\n"
-		"   emawp -m <arg> <arg> : multiply\n"
-		"   emawp -d <arg> <arg> : divide\n"
-		"   emawp -h             : print help and exit\n"
+		"   emawp [-v] <arg>\n"
+		"   emawp [-v] -n <arg>\n"
+		"   emawp [-v] -a|-s|-m|-d <arg> <arg>\n"
+		"   emawp -h\n\n"
+		"If no operation is specified, argument is converted and printed.\n"
+		"Other operations are:\n\n"
+		"   -n : normalize\n"
+		"   -a : add\n"
+		"   -s : subtract\n"
+		"   -m : multiply\n"
+		"   -d : divide\n"
+		"   -h : print help\n"
 		"\n"
-		"Args can be either hex or float (can also be mixed):\n\n"
-		"   hex   - 48-bit hex triplet representation of MERA-400 float (eg. 0x4000 0x0000 0x0002)\n"
-		"   float - floating point number (eg. 1.4151)\n"
+		"Arguments can either be a hex triplet representing floating point number in\n"
+		"MERA-400 internal format (eg. 0x4000 0x0000 0x0002), or plain floating point nummer.\n"
+		"Argument types can also be mixed. \"-v\" switch makes computations verbose.\n\n"
 	);
 }
 
@@ -109,6 +115,16 @@ void print_num(struct num *n, char *name)
 		42 - width, n->f
 	);
 
+	if (verbose) {
+		signed char exp = n->r[2] & 0x00ff;
+		int64_t m;
+		m  = (int64_t) n->r[0] << 48;
+		m |= (int64_t) n->r[1] << 32;
+		m |= (int64_t) (n->r[2] & 0xff00) << 16;
+		double m_f = ldexp(m, -63);
+		printf("                                             = %.*f * 2^%i\n", 42, m_f, exp);
+	}
+
 	n->type = HEX;
 }
 
@@ -125,7 +141,7 @@ int main(int argc, char **argv)
 		errexit("Cannot initialize AWP");
 	}
 
-	while ((option = getopt(argc, argv,"nhasmd")) != -1) {
+	while ((option = getopt(argc, argv,"nhasmdv")) != -1) {
 		if (operation != NONE) {
 			errexit("Only one operation may be specified");
 		}
@@ -152,6 +168,9 @@ int main(int argc, char **argv)
 			case 'd':
 				operation = DIV;
 				args_req++;
+				break;
+			case 'v':
+				verbose = 1;
 				break;
 			default:
 				exit(1);
