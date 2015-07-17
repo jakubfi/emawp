@@ -18,7 +18,7 @@ add_executable(emawp
 	emawp-tool.c
 )
 
-target_link_libraries(emawp emawp-lib)
+target_link_libraries(emawp m emawp-lib)
 
 install(TARGETS emawp
 	RUNTIME DESTINATION bin
