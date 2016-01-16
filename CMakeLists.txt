@@ -1,16 +1,13 @@
 cmake_minimum_required(VERSION 2.8.4)
 project(emawp C)
 
-set(DEBUG 0)
+include(appversion.cmake)
 
-set(EMAWP_VERSION_MAJOR 1)
-set(EMAWP_VERSION_MINOR 0)
-set(EMAWP_VERSION_PATCH 0)
-set(EMAWP_VERSION ${EMAWP_VERSION_MAJOR}.${EMAWP_VERSION_MINOR}.${EMAWP_VERSION_PATCH})
+set(DEBUG 0)
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-add_definitions(-Wall -std=c99 -DEMAWP_VERSION="${EMAWP_VERSION}")
+add_definitions(-Wall -std=c99 -DEMAWP_VERSION="${APP_VERSION}")
 
 if(DEBUG)
 	add_definitions(-DDEBUG -g -O0)
