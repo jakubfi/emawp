@@ -4,7 +4,7 @@ add_library(emawp-lib SHARED
 
 set_target_properties(emawp-lib PROPERTIES
 	OUTPUT_NAME "emawp"
-	SOVERSION ${EMAWP_VERSION_MAJOR}.${EMAWP_VERSION_MINOR}
+	SOVERSION ${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}
 	PUBLIC_HEADER ${CMAKE_SOURCE_DIR}/include/emawp.h
 )
 
