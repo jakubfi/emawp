@@ -381,7 +381,8 @@ int awp_float_mul(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3)
 	}
 
 	f1 *= f2;
-	res = awp_from_double(awp->r1, awp->r2, awp->r3, awp->flags, f1, 0);
+	// NOTE: rounding is done for MW as well (in AWP state F7)
+	res = awp_from_double(awp->r1, awp->r2, awp->r3, awp->flags, f1, 1);
 
 	FL_CLR(*(awp->flags), FL_C); // effectively always 0
 
@@ -409,7 +410,13 @@ int awp_float_div(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3)
 	}
 
 	f1 /= f2;
-	res = awp_from_double(awp->r1, awp->r2, awp->r3, awp->flags, f1, 0);
+
+	// NOTE: there is no rounding for DF, but in case of negative result
+	// the same operation as for rounding is performed (in AWP state F7)
+	int round = 0;
+	if (f1 < 0) round = 1;
+
+	res = awp_from_double(awp->r1, awp->r2, awp->r3, awp->flags, f1, round);
 
 	// NOTE: DF always clears C
 	FL_CLR(*(awp->flags), FL_C);
