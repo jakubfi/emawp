@@ -9,9 +9,9 @@ set_target_properties(emawp-lib PROPERTIES
 )
 
 install(TARGETS emawp-lib
-	LIBRARY DESTINATION lib
-	ARCHIVE DESTINATION lib
-	PUBLIC_HEADER DESTINATION include
+	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+	PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
 add_executable(emawp
@@ -21,7 +21,7 @@ add_executable(emawp
 target_link_libraries(emawp m emawp-lib)
 
 install(TARGETS emawp
-	RUNTIME DESTINATION bin
+	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
 # vim: tabstop=4

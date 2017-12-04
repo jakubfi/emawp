@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 2.8.4)
 project(emawp C)
 
+include(GNUInstallDirs)
 include(appversion.cmake)
 
 set(DEBUG 0)
@@ -30,7 +31,7 @@ configure_file(
 install(FILES
 	${PROJECT_BINARY_DIR}/emawp-config.cmake
 	${PROJECT_BINARY_DIR}/emawp-config-version.cmake
-	DESTINATION lib/emawp
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/emawp
 	COMPONENT dev
 )
 
