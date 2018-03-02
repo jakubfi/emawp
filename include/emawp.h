@@ -20,9 +20,13 @@
 
 #include <inttypes.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 enum awp_addsub_op {
-	AWP_OP_ADD = 1,
 	AWP_OP_SUB = -1,
+	AWP_OP_ADD = 1,
 };
 
 enum awp_errors {
@@ -54,6 +58,10 @@ int awp_float_norm(struct awp *awp);
 int awp_float_addsub(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3, int sign);
 int awp_float_mul(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3);
 int awp_float_div(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 
