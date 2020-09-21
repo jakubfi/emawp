@@ -143,7 +143,7 @@ int main(int argc, char **argv)
 
 	while ((option = getopt(argc, argv,"nhasmdv")) != -1) {
 		if (operation != NONE) {
-			errexit("Only one operation may be specified");
+			errexit("Only one operation can be specified");
 		}
 
 		switch (option) {
@@ -155,19 +155,19 @@ int main(int argc, char **argv)
 				break;
 			case 'a':
 				operation = ADD;
-				args_req++;
+				args_req = 2;
 				break;
 			case 's':
 				operation = SUB;
-				args_req++;
+				args_req = 2;
 				break;
 			case 'm':
 				operation = MUL;
-				args_req++;
+				args_req = 2;
 				break;
 			case 'd':
 				operation = DIV;
-				args_req++;
+				args_req = 2;
 				break;
 			case 'v':
 				verbose = 1;
@@ -179,32 +179,37 @@ int main(int argc, char **argv)
 
 	int npos = 0;
 
-	while (args_req > 0) {
-		if (optind >= argc) {
-			errexit("Not enough positional arguments for operation");
-		}
+	int pos_args = argc-optind;
 
-		if (!strncmp(argv[optind], "0x", 2)) {
+	if (pos_args == args_req) { // float input
+		while (args_req > 0) {
+			n[npos].type = FLOAT;
+			n[npos].f = atof(argv[optind]);
+			optind++;
+			npos++;
+			args_req--;
+		}
+	} else if (pos_args == 3*args_req) { // word input
+		while (args_req > 0) {
 			n[npos].type = HEX;
 			for (int i=0 ; i<3 ; i++) {
 				if (optind >= argc) {
 					errexit("Not enough positional arguments for a triplet");
 				}
-				n[npos].r[i] = strtol(argv[optind], NULL, 16);
+				if (!strncmp(argv[optind], "0x", 2)) {
+					n[npos].r[i] = strtol(argv[optind], NULL, 16);
+				} else if (!strncmp(argv[optind], "0b", 2)) {
+					n[npos].r[i] = strtol(argv[optind]+2, NULL, 2);
+				} else {
+					n[npos].r[i] = strtol(argv[optind], NULL, 10);
+				}
 				optind++;
 			}
-		} else {
-			n[npos].type = FLOAT;
-			n[npos].f = atof(argv[optind]);
-			optind++;
+			npos++;
+			args_req--;
 		}
-
-		npos++;
-		args_req--;
-	}
-
-	if (optind != argc) {
-		errexit("Too many positional arguments for operation");
+	} else {
+		errexit("Wrong number of positional arguments for operation");
 	}
 
 	print_num(n+0, "in1");
