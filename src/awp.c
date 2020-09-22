@@ -348,21 +348,43 @@ struct awpf {
 } awpf;
 
 // -----------------------------------------------------------------------
-void awp_float_from_words(struct awpf *f, uint16_t w1, uint16_t w2, uint16_t w3)
+int awp_float_from_words(struct awpf *f, uint16_t w1, uint16_t w2, uint16_t w3)
 {
-        f->m  = (int64_t) w1 << 48;
-        f->m |= (int64_t) w2 << 32;
-        f->m |= (int64_t) (w3 & 0xff00) << 16;
-        f->e = (int8_t) (w3 & 0xff);
+	f->m  = (int64_t) w1 << 48;
+	f->m |= (int64_t) w2 << 32;
+	f->m |= (int64_t) (w3 & 0xff00) << 16;
+	f->e = (int8_t) (w3 & 0xff);
+
+	if (f->m == 0) {
+		f->e = 0;
+		return 0;
+	} else {
+		return (w1 ^ (w1<<1)) & 0x8000 ? 0 : -1;
+	}
 }
 
 // -----------------------------------------------------------------------
-void awp_float_to_words(struct awpf *f, uint16_t *w1, uint16_t *w2, uint16_t *w3)
+void awp_float_to_words(struct awpf *f, struct awp *awp)
 {
-	*w1 = f->m >> 48;
-	*w2 = f->m >> 32;
-	*w3 = (f->m >> 16) & 0xff00;
-	*w3 |= f->e & 0xff;
+	if (f->m == 0) {
+		f->e = 0;
+	}
+
+	*awp->r1 = f->m >> 48;
+	*awp->r2 = f->m >> 32;
+	*awp->r3 = ((f->m >> 16) & 0xff00) | ( f->e & 0xff);
+
+	// set Z and M
+	if ((f->m & FP_M_MASK) == 0) {
+		FL_SET(*awp->flags, FL_Z);
+		FL_CLR(*awp->flags, FL_M);
+	} else if ((f->m & FP_M_BIT_0)) {
+		FL_CLR(*awp->flags, FL_Z);
+		FL_SET(*awp->flags, FL_M);
+	} else {
+		FL_CLR(*awp->flags, FL_Z);
+		FL_CLR(*awp->flags, FL_M);
+	}
 }
 
 // -----------------------------------------------------------------------
@@ -393,8 +415,12 @@ int awp_float_addsub(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3, int
 {
 	struct awpf af1, af2;
 
-	awp_float_from_words(&af1, *awp->r1, *awp->r2, *awp->r3);
-	awp_float_from_words(&af2, d1, d2, d3);
+	if (awp_float_from_words(&af1, *awp->r1, *awp->r2, *awp->r3) || awp_float_from_words(&af2, d1, d2, d3)) {
+		return AWP_FP_ERR;
+	}
+
+//	dump("in1:", &af1);
+//	dump("in2:", &af2);
 
 	int ediff = af1.e - af2.e;
 	if (ediff < 0) {
@@ -413,39 +439,41 @@ int awp_float_addsub(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3, int
 		}
 	}
 
+//	dump("denorm1:", &af1);
+//	dump("denorm2:", &af2);
 	// denormalize in case operation would overflow
 	// arithmetic is done in 64 bits, so there's plenty of space
 	awp_denorm(&af1, 1);
 	awp_denorm(&af2, 1);
 
+//	dump("denorm_1:", &af1);
+//	dump("denorm_2:", &af2);
 	af1.m = af1.m + op * af2.m;
 	awp_norm(&af1);
 
+//	dump("res:", &af1);
 	// rounding up if bit 40 is set. this also sets the carry flag
 	if (af1.m & FP_M_BIT_40) {
 		awp_denorm(&af1, 1);
 		af1.m += FP_M_BIT_40;
 		awp_norm(&af1);
+//		FL_SET(*awp->flags, FL_C);
+	} else {
+//		FL_CLR(*awp->flags, FL_C);
+	}
+
+//	dump("round:", &af1);
+	// NOTE: AF/SF never set V
+
+	// TODO: store and UF/OF check order
+	if ((af1.m & FP_M_BIT_40)) {
+		// set C to M[-1] (used only by AF/SF)
 		FL_SET(*awp->flags, FL_C);
 	} else {
 		FL_CLR(*awp->flags, FL_C);
 	}
 
-	// set Z and M
-	if ((af1.m & FP_M_MASK) == 0) {
-		FL_SET(*awp->flags, FL_Z);
-		FL_CLR(*awp->flags, FL_M);
-	} else if ((af1.m & FP_M_BIT_0)) {
-		FL_CLR(*awp->flags, FL_Z);
-		FL_SET(*awp->flags, FL_M);
-	} else {
-		FL_CLR(*awp->flags, FL_Z);
-		FL_CLR(*awp->flags, FL_M);
-	}
-
-	// NOTE: AF/SF never set V
-
-	awp_float_to_words(&af1, awp->r1, awp->r2, awp->r3);
+	awp_float_to_words(&af1, awp);
 
 	// check for overflow/underflow
 	if (af1.e > 127) {
@@ -460,61 +488,135 @@ int awp_float_addsub(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3, int
 // -----------------------------------------------------------------------
 int awp_float_mul(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3)
 {
-	int res;
-	double f1, f2;
+	struct awpf af1, af2;
 
-	res = awp_to_double(&f1, *(awp->r1), *(awp->r2), *(awp->r3));
-	if (res != AWP_OK) {
-		return res;
+	if (awp_float_from_words(&af1, *awp->r1, *awp->r2, *awp->r3) || awp_float_from_words(&af2, d1, d2, d3)) {
+		return AWP_FP_ERR;
 	}
 
-	res = awp_to_double(&f2, d1, d2, d3);
-	if (res != AWP_OK) {
-		return res;
+	// remove signs, store the final sign
+	awp_denorm(&af1, 1);
+	awp_denorm(&af2, 1);
+	int sign = 0;
+	if (af1.m < 0) {
+		sign++;
+		af1.m = -af1.m;
+	}
+	if (af2.m < 0) {
+		sign++;
+		af2.m = -af2.m;
 	}
 
-	f1 *= f2;
-	// NOTE: rounding is done for MW as well (in AWP state F7)
-	res = awp_from_double(awp->r1, awp->r2, awp->r3, awp->flags, f1, 1);
+	// multiply
+	// we multiply one additional bit because of the initial denormalization
+	int64_t m = 0;
+	af1.e += af2.e;
+	af2.m >>= 23;
+	for (int i=0 ; i<41 ; i++) {
+		m >>= 1;
+		m += af1.m * (af2.m & 1);
+		af2.m >>= 1;
+	}
+	if (sign & 1) {
+		af1.m = -m;
+	} else {
+		af1.m = m;
+	}
 
-	FL_CLR(*(awp->flags), FL_C); // effectively always 0
+	awp_norm(&af1);
 
-	return res;
+	// rounding up if bit 40 is set. this also sets the carry flag
+	if (af1.m & FP_M_BIT_40) {
+		awp_denorm(&af1, 1);
+		af1.m += FP_M_BIT_40;
+		awp_norm(&af1);
+		FL_SET(*awp->flags, FL_C);
+	} else {
+		FL_CLR(*awp->flags, FL_C);
+	}
+
+	// TODO: store and UF/OF check order
+
+	awp_float_to_words(&af1, awp);
+
+	// check for overflow/underflow
+	if (af1.e > 127) {
+		return AWP_FP_OF;
+	} else if ((af1.e < -128) && (af1.m != 0)) {
+		return AWP_FP_UF;
+	} else {
+		return AWP_OK;
+	}
 }
 
 // -----------------------------------------------------------------------
 int awp_float_div(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3)
 {
-	int res;
-	double f1, f2;
+	struct awpf af1, af2;
 
-	res = awp_to_double(&f1, *(awp->r1), *(awp->r2), *(awp->r3));
-	if (res != AWP_OK) {
-		return res;
-	}
-
-	res = awp_to_double(&f2, d1, d2, d3);
-	if (res != AWP_OK) {
-		return res;
-	}
-
-	if (f2 == 0.0f) {
+	if (awp_float_from_words(&af1, *awp->r1, *awp->r2, *awp->r3) || awp_float_from_words(&af2, d1, d2, d3)) {
 		return AWP_FP_ERR;
 	}
 
-	f1 /= f2;
+	// div by 0
+	if (af2.m == 0) {
+		return AWP_FP_ERR;
+	}
 
-	// NOTE: there is no rounding for DF, but in case of negative result
-	// the same operation as for rounding is performed (in AWP state F7)
-	int round = 0;
-	if (f1 < 0) round = 1;
+	// remove signs, store the final sign
+	awp_denorm(&af1, 2);
+	awp_denorm(&af2, 1);
+//	dump("in denorm1", &af1);
+//	dump("in denorm2", &af2);
 
-	res = awp_from_double(awp->r1, awp->r2, awp->r3, awp->flags, f1, round);
+	int sign = 1;
+	if (af1.m < 0) {
+		sign *= -1;
+		af1.m = -af1.m;
+	}
+	if (af2.m < 0) {
+		sign *= -1;
+		af2.m = -af2.m;
+	}
 
-	// NOTE: DF always clears C
-	FL_CLR(*(awp->flags), FL_C);
+//	dump("in sign1", &af1);
+//	dump("in sign2", &af2);
 
-	return res;
+	// divide
+	af1.e -= af2.e;
+	int64_t rem = af1.m;
+	af1.m = 0;
+	for (int i=0 ; i<41 ; i++) {
+		rem -= af2.m;
+		af1.m <<= 1;
+		if (rem < 0) {
+			rem += af2.m;
+		} else {
+			af1.m |= FP_M_BIT_40;
+		}
+		rem <<= 1;
+	}
+	af1.m *= sign;
+//	dump("div res", &af1);
+
+	awp_norm(&af1);
+//	dump("norm res", &af1);
+
+	// division always clears C
+	FL_CLR(*awp->flags, FL_C);
+
+	// TODO: store and UF/OF check order
+
+	awp_float_to_words(&af1, awp);
+
+	// check for overflow/underflow
+	if (af1.e > 127) {
+		return AWP_FP_OF;
+	} else if ((af1.e < -128) && (af1.m != 0)) {
+		return AWP_FP_UF;
+	} else {
+		return AWP_OK;
+	}
 }
 
 // vim: tabstop=4 shiftwidth=4 autoindent
