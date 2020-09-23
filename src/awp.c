@@ -326,22 +326,6 @@ int awp_from_double(uint16_t *d1, uint16_t *d2, uint16_t *d3, uint16_t *flags, d
 	return ret;
 }
 
-// -----------------------------------------------------------------------
-int awp_float_norm(struct awp *awp)
-{
-	int res;
-	double f;
-
-	// ignore return value because denormalized input is what we expect here
-	awp_to_double(&f, *(awp->r1), *(awp->r2), *(awp->r3));
-	res = awp_from_double(awp->r1, awp->r2, awp->r3, awp->flags, f, 0);
-
-	// NOTE: normalization always clears C
-	FL_CLR(*(awp->flags), FL_C);
-
-	return res;
-}
-
 struct awpf {
 	int64_t m;
 	int16_t e;
@@ -366,16 +350,9 @@ int awp_float_from_words(struct awpf *f, uint16_t w1, uint16_t w2, uint16_t w3)
 // -----------------------------------------------------------------------
 void awp_float_to_words(struct awpf *f, struct awp *awp)
 {
-	if (f->m == 0) {
-		f->e = 0;
-	}
-
-	*awp->r1 = f->m >> 48;
-	*awp->r2 = f->m >> 32;
-	*awp->r3 = ((f->m >> 16) & 0xff00) | ( f->e & 0xff);
-
 	// set Z and M
 	if ((f->m & FP_M_MASK) == 0) {
+		f->e = 0; // by definition
 		FL_SET(*awp->flags, FL_Z);
 		FL_CLR(*awp->flags, FL_M);
 	} else if ((f->m & FP_M_BIT_0)) {
@@ -384,6 +361,33 @@ void awp_float_to_words(struct awpf *f, struct awp *awp)
 	} else {
 		FL_CLR(*awp->flags, FL_Z);
 		FL_CLR(*awp->flags, FL_M);
+	}
+
+	*awp->r1 = f->m >> 48;
+	*awp->r2 = f->m >> 32;
+	*awp->r3 = ((f->m >> 16) & 0xff00) | ( f->e & 0xff);
+}
+void awp_norm(struct awpf *f);
+
+// -----------------------------------------------------------------------
+int awp_float_norm(struct awp *awp)
+{
+	struct awpf f;
+
+	awp_float_from_words(&f, *awp->r1, *awp->r2, *awp->r3);
+	awp_norm(&f);
+	awp_float_to_words(&f, awp);
+
+	// NOTE: normalization always clears C
+	FL_CLR(*(awp->flags), FL_C);
+
+	// check for overflow/underflow
+	if (f.e > 127) {
+		return AWP_FP_OF;
+	} else if ((f.e < -128) && (f.m != 0)) {
+		return AWP_FP_UF;
+	} else {
+		return AWP_OK;
 	}
 }
 
@@ -397,17 +401,10 @@ void awp_denorm(struct awpf *f, int x)
 // -----------------------------------------------------------------------
 void awp_norm(struct awpf *f)
 {
-	while ((f->m != 0) && !((f->m ^ (f->m<<1)) & FP_M_BIT_0)) {
+	while ((f->m != 0) && !((f->m ^ (f->m << 1)) & FP_M_BIT_0)) {
 		f->m <<= 1;
 		f->e -= 1;
 	}
-}
-
-#include <stdio.h>
-// -----------------------------------------------------------------------
-void dump(char *str, struct awpf *f)
-{
-	printf("%15s : 0x%016lx (%i)\n", str, f->m, f->e);
 }
 
 // -----------------------------------------------------------------------
@@ -418,9 +415,6 @@ int awp_float_addsub(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3, int
 	if (awp_float_from_words(&af1, *awp->r1, *awp->r2, *awp->r3) || awp_float_from_words(&af2, d1, d2, d3)) {
 		return AWP_FP_ERR;
 	}
-
-//	dump("in1:", &af1);
-//	dump("in2:", &af2);
 
 	int ediff = af1.e - af2.e;
 	if (ediff < 0) {
@@ -439,35 +433,27 @@ int awp_float_addsub(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3, int
 		}
 	}
 
-//	dump("denorm1:", &af1);
-//	dump("denorm2:", &af2);
 	// denormalize in case operation would overflow
 	// arithmetic is done in 64 bits, so there's plenty of space
 	awp_denorm(&af1, 1);
 	awp_denorm(&af2, 1);
 
-//	dump("denorm_1:", &af1);
-//	dump("denorm_2:", &af2);
 	af1.m = af1.m + op * af2.m;
 	awp_norm(&af1);
 
-//	dump("res:", &af1);
 	// rounding up if bit 40 is set. this also sets the carry flag
 	if (af1.m & FP_M_BIT_40) {
 		awp_denorm(&af1, 1);
 		af1.m += FP_M_BIT_40;
 		awp_norm(&af1);
-//		FL_SET(*awp->flags, FL_C);
-	} else {
-//		FL_CLR(*awp->flags, FL_C);
 	}
 
-//	dump("round:", &af1);
 	// NOTE: AF/SF never set V
 
 	// TODO: store and UF/OF check order
+
+	// set C to M[-1]
 	if ((af1.m & FP_M_BIT_40)) {
-		// set C to M[-1] (used only by AF/SF)
 		FL_SET(*awp->flags, FL_C);
 	} else {
 		FL_CLR(*awp->flags, FL_C);
@@ -525,7 +511,7 @@ int awp_float_mul(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3)
 
 	awp_norm(&af1);
 
-	// rounding up if bit 40 is set. this also sets the carry flag
+	// rounding up if bit 40 is set. this also sets the carry flag contrary to what doc says
 	if (af1.m & FP_M_BIT_40) {
 		awp_denorm(&af1, 1);
 		af1.m += FP_M_BIT_40;
@@ -566,8 +552,6 @@ int awp_float_div(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3)
 	// remove signs, store the final sign
 	awp_denorm(&af1, 2);
 	awp_denorm(&af2, 1);
-//	dump("in denorm1", &af1);
-//	dump("in denorm2", &af2);
 
 	int sign = 1;
 	if (af1.m < 0) {
@@ -578,9 +562,6 @@ int awp_float_div(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3)
 		sign *= -1;
 		af2.m = -af2.m;
 	}
-
-//	dump("in sign1", &af1);
-//	dump("in sign2", &af2);
 
 	// divide
 	af1.e -= af2.e;
@@ -597,10 +578,8 @@ int awp_float_div(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3)
 		rem <<= 1;
 	}
 	af1.m *= sign;
-//	dump("div res", &af1);
 
 	awp_norm(&af1);
-//	dump("norm res", &af1);
 
 	// division always clears C
 	FL_CLR(*awp->flags, FL_C);
