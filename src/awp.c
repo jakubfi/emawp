@@ -393,7 +393,7 @@ int awp_float_mul(uint16_t *r, uint16_t *n)
 	// multiply one additional bit because of the initial denormalization
 	for (int i=0 ; i<41 ; i++) {
 		m >>= 1;
-		m += af1.m * (af2.m & 1);
+		if (af2.m & 1) m += af1.m;
 		af2.m >>= 1;
 	}
 	if (sign & 1) {
