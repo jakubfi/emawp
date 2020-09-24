@@ -293,18 +293,6 @@ int awp_from_double(uint16_t *r, double f)
 	// scale m to 64-bit
 	af.m = ldexp(m, FP_BITS-1);
 
-/*
-	Normalize
-	normalized mantissa for frexp() is: (-1, -0.5], [0.5, 1)
-	normalized mantissa for AWP is:     [-1, -0.5), [0.5, 1)
-
-	for example, -1 + -1 = -2
-
-	-1  0x8000 0x0000 0x0000 +
-	-1  0x8000 0x0000 0x0000
-	=   0xc000 0x0000 0x0002 = -0.5 * 2^n     (without the fix)
-	=   0x8000 0x0000 0x0001 = -1   * 2^(n-1) (with the fix)
-*/
 	awp_norm(&af);
 
 	return awp_store_float(&af, r+1, r);
