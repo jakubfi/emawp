@@ -316,10 +316,7 @@ int awp_float_addsub(uint16_t *r, uint16_t *n, int op)
 {
 	struct awpf af1, af2;
 
-	if (awp_load_float(&af1, r+1)) {
-		return AWP_FP_ERR;
-	}
-	if (awp_load_float(&af2, n)) {
+	if (awp_load_float(&af1, r+1) || awp_load_float(&af2, n)) {
 		return AWP_FP_ERR;
 	}
 
