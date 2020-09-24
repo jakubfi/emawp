@@ -145,7 +145,7 @@ int awp_dword_mul(uint16_t *r, int16_t n)
 	r[2] = DWORD_L(res);
 
 	// MW does not touch C
-	// MW may touch V, but it won't (?)
+	// MW may touch V, but doesn't (?)
 
 	__awp_dword_set_M(r, res, 0);
 	__awp_dword_set_Z(r, res);
@@ -173,7 +173,7 @@ int awp_dword_div(uint16_t *r, int16_t n)
 	r[2] = res;
 	r[1] = a % n;
 
-	// DW has does not touch V nor C
+	// NOTE: DW does not touch V nor C
 
 	__awp_dword_set_M(r, res, 0);
 	__awp_dword_set_Z(r, res);
@@ -405,15 +405,17 @@ int awp_float_mul(uint16_t *r, uint16_t *n)
 	awp_norm(&af1);
 
 	// rounding up if bit 40 is set.
-	// this also sets the carry flag contrary to what documentation says
 	if (af1.m & FP_M_BIT_40) {
 		awp_denorm(&af1, 1);
 		af1.m += FP_M_BIT_40;
 		awp_norm(&af1);
-		FL_SET(r[0], FL_C);
-	} else {
-		FL_CLR(r[0], FL_C);
 	}
+
+	// set C to M[-1]
+	if ((af1.m & FP_M_BIT_40)) FL_SET(r[0], FL_C);
+	else FL_CLR(r[0], FL_C);
+
+	// NOTE: MF never set V
 
 	return awp_store_float(&af1, r+1, r);
 }
@@ -466,6 +468,8 @@ int awp_float_div(uint16_t *r, uint16_t *n)
 
 	// division always clears C
 	FL_CLR(r[0], FL_C);
+
+	// NOTE: DF never set V
 
 	return awp_store_float(&af1, r+1, r);
 }
