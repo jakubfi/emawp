@@ -35,22 +35,20 @@ char *retnames[] = {
 	"UDFLOW",
 	"OVFLOW",
 	"DIV_OF",
-	"DENORM",
+	"FP_ERR",
 };
 
 enum types { FLOAT, HEX, BOTH };
 enum operations { NONE, NORM, ADD, SUB, MUL, DIV };
 char *opnames[] = { "none", "norm", "add", "sub", "mul", "div" };
 int verbose = 0;
-struct awp *awp;
 
 struct num {
-	uint16_t r[3];
+	uint16_t r[4];
 	double f;
-	uint16_t flags;
 	int type;
 	int res;
-} n[3];
+} n[2];
 
 // -----------------------------------------------------------------------
 void errexit(char *s, ...)
@@ -61,7 +59,6 @@ void errexit(char *s, ...)
 	vprintf(s, ap);
 	printf("\n");
 	va_end(ap);
-	awp_destroy(awp);
 	exit(1);
 }
 
@@ -93,9 +90,9 @@ void usage()
 void print_num(struct num *n, char *name)
 {
 	if (n->type == HEX) {
-		n->res = awp_to_double(&n->f, n->r[0], n->r[1], n->r[2]);
+		awp_to_double(n->r, &n->f);
 	} else if (n->type == FLOAT) {
-		n->res = awp_from_double(n->r+0, n->r+1, n->r+2, &n->flags, n->f, 0);
+		n->res = awp_from_double(n->r, n->f);
 	}
 
 	int width = (int) log10(n->f);
@@ -104,23 +101,23 @@ void print_num(struct num *n, char *name)
 	printf("%4s:  %6s  %s%s%s%s  0x%04x 0x%04x 0x%04x  %s  %.*f\n",
 		name,
 		retnames[n->res],
-		n->flags & FL_Z ? "Z" : "-",
-		n->flags & FL_M ? "M" : "-",
-		n->flags & FL_C ? "C" : "-",
-		n->flags & FL_V ? "V" : "-",
-		n->r[0],
+		n->r[0] & FL_Z ? "Z" : "-",
+		n->r[0] & FL_M ? "M" : "-",
+		n->r[0] & FL_C ? "C" : "-",
+		n->r[0] & FL_V ? "V" : "-",
 		n->r[1],
 		n->r[2],
+		n->r[3],
 		n->type == HEX ? "->" : "<-",
 		42 - width, n->f
 	);
 
 	if (verbose) {
-		signed char exp = n->r[2] & 0x00ff;
+		signed char exp = n->r[3] & 0x00ff;
 		int64_t m;
-		m  = (int64_t) n->r[0] << 48;
-		m |= (int64_t) n->r[1] << 32;
-		m |= (int64_t) (n->r[2] & 0xff00) << 16;
+		m  = (int64_t) n->r[1] << 48;
+		m |= (int64_t) n->r[2] << 32;
+		m |= (int64_t) (n->r[3] & 0xff00) << 16;
 		double m_f = ldexp(m, -63);
 		printf("                                             = %.*f * 2^%i\n", 42, m_f, exp);
 	}
@@ -132,17 +129,11 @@ void print_num(struct num *n, char *name)
 int main(int argc, char **argv)
 {
 	int option;
-	int args_req = 1;
+	int args_req = 2;
 	int operation = NONE;
 
-	awp = awp_init(&(n[0].flags), &(n[0].r[0]), &(n[0].r[1]), &(n[0].r[2]));
-
-	if (!awp) {
-		errexit("Cannot initialize AWP");
-	}
-
 	while ((option = getopt(argc, argv,"nhasmdv")) != -1) {
-		if (operation != NONE) {
+		if ((operation != NONE) && (option != 'h') && (option != 'v')){
 			errexit("Only one operation can be specified");
 		}
 
@@ -152,22 +143,19 @@ int main(int argc, char **argv)
 				exit(0);
 			case 'n':
 				operation = NORM;
+				args_req = 1;
 				break;
 			case 'a':
 				operation = ADD;
-				args_req = 2;
 				break;
 			case 's':
 				operation = SUB;
-				args_req = 2;
 				break;
 			case 'm':
 				operation = MUL;
-				args_req = 2;
 				break;
 			case 'd':
 				operation = DIV;
-				args_req = 2;
 				break;
 			case 'v':
 				verbose = 1;
@@ -178,7 +166,6 @@ int main(int argc, char **argv)
 	}
 
 	int npos = 0;
-
 	int pos_args = argc-optind;
 
 	if (pos_args == args_req) { // float input
@@ -192,7 +179,7 @@ int main(int argc, char **argv)
 	} else if (pos_args == 3*args_req) { // word input
 		while (args_req > 0) {
 			n[npos].type = HEX;
-			for (int i=0 ; i<3 ; i++) {
+			for (int i=1 ; i<=3 ; i++) {
 				if (optind >= argc) {
 					errexit("Not enough positional arguments for a triplet");
 				}
@@ -217,40 +204,30 @@ int main(int argc, char **argv)
 		print_num(n+1, "in2");
 	}
 
-	if ((n[0].res == AWP_FP_ERR) && (operation != NONE) && (operation != NORM)) {
-		errexit("Input is denormalized");
-	}
-
 	switch (operation) {
 		case NORM:
-			awp_float_norm(awp);
+			awp_float_norm(n[0].r);
 			break;
 		case ADD:
-			n[0].res = awp_float_addsub(awp, n[1].r[0], n[1].r[1], n[1].r[2], AWP_OP_ADD);
+			n[0].res = awp_float_addsub(n[0].r, n[1].r+1, AWP_OP_ADD);
 			break;
 		case SUB:
-			n[0].res = awp_float_addsub(awp, n[1].r[0], n[1].r[1], n[1].r[2], AWP_OP_SUB);
+			n[0].res = awp_float_addsub(n[0].r, n[1].r+1, AWP_OP_SUB);
 			break;
 		case MUL:
-			n[0].res = awp_float_mul(awp, n[1].r[0], n[1].r[1], n[1].r[2]);
+			n[0].res = awp_float_mul(n[0].r, n[1].r+1);
 			break;
 		case DIV:
-			n[0].res = awp_float_div(awp, n[1].r[0], n[1].r[1], n[1].r[2]);
+			n[0].res = awp_float_div(n[0].r, n[1].r+1);
 			break;
 		case NONE:
 		default:
 			break;
 	}
 
-	if ((operation == DIV) && (n[0].res == AWP_FP_ERR)) {
-		errexit("Division by zero");
-	}
-
 	if (operation != NONE) {
 		print_num(n+0, opnames[operation]);
 	}
-
-	awp_destroy(awp);
 
 	return 0;
 }

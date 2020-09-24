@@ -38,26 +38,17 @@ enum awp_errors {
 	AWP_FP_ERR,
 };
 
-struct awp {
-	uint16_t *r1, *r2, *r3;
-	uint16_t *flags;
-	int v;
-};
+int awp_dword_addsub(uint16_t *r, uint16_t *n, int op);
+int awp_dword_mul(uint16_t *r, int16_t n);
+int awp_dword_div(uint16_t *r, int16_t n);
 
-struct awp * awp_init(uint16_t *flags, uint16_t *r1, uint16_t *r2, uint16_t *r3);
-void awp_destroy(struct awp *awp);
+int awp_to_double(uint16_t *r, double *f);
+int awp_from_double(uint16_t *r, double f);
 
-int awp_dword_addsub(struct awp *awp, uint16_t b1, uint16_t b2, int op);
-int awp_dword_mul(struct awp *awp, int16_t b);
-int awp_dword_div(struct awp *awp, int16_t b);
-
-int awp_to_double(double *f, uint16_t d1, uint16_t d2, uint16_t d3);
-int awp_from_double(uint16_t *d1, uint16_t *d2, uint16_t *d3, uint16_t *flags, double f, int round);
-
-int awp_float_norm(struct awp *awp);
-int awp_float_addsub(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3, int sign);
-int awp_float_mul(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3);
-int awp_float_div(struct awp *awp, uint16_t d1, uint16_t d2, uint16_t d3);
+int awp_float_norm(uint16_t *r);
+int awp_float_addsub(uint16_t *r, uint16_t *n, int op);
+int awp_float_mul(uint16_t *r, uint16_t *n);
+int awp_float_div(uint16_t *r, uint16_t *n);
 
 #ifdef __cplusplus
 }
