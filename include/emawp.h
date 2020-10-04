@@ -38,7 +38,8 @@ enum awp_errors {
 	AWP_FP_ERR,
 };
 
-int awp_dword_addsub(uint16_t *r, uint16_t *n, int op);
+int awp_dword_add(uint16_t *r, uint16_t *n);
+int awp_dword_sub(uint16_t *r, uint16_t *n);
 int awp_dword_mul(uint16_t *r, int16_t n);
 int awp_dword_div(uint16_t *r, int16_t n);
 
