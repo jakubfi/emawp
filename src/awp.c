@@ -123,6 +123,9 @@ int awp_dword_addsub(uint16_t *r, uint16_t *n, int op)
 	uint32_t b = DWORD(n[0], n[1]);
 	uint64_t res = (uint64_t) a + (op * b);
 
+	int32_t sa = (int32_t) a;
+	int32_t sb = (int32_t) b;
+
 	r[1] = DWORD_H(res);
 	r[2] = DWORD_L(res);
 
@@ -131,7 +134,12 @@ int awp_dword_addsub(uint16_t *r, uint16_t *n, int op)
 	int v = __awp_dword_update_V(r, a, op*b, res);
 	__awp_dword_set_M(r, res, v);
 	__awp_dword_set_C(r, res);
-	__awp_dword_set_Z(r, res);
+//	__awp_dword_set_Z(r, res);
+	if (sa + (op * sb) == 0) {
+		FL_SET(*r, FL_Z);
+	} else {
+		FL_CLR(*r, FL_Z);
+	}
 
 	return AWP_OK;
 }
