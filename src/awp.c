@@ -205,7 +205,11 @@ int awp_dword_div(uint16_t *r, int16_t n)
 
 	int32_t a = DWORD(r[1], r[2]);
 
-	int32_t res = a / n;
+	int64_t res = (int64_t) a / n;
+	// dirty workaround for an edge case in the H/W
+	if ((a == 2147483647) && (n == -32768)) {
+		res = 1;
+	}
 
 	// NOTE: in case of AWP_DIV_OF CPU registers stay unchanged
 	if ((res > SHRT_MAX) || (res < SHRT_MIN)) {
