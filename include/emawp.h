@@ -24,11 +24,6 @@
 extern "C" {
 #endif
 
-enum awp_addsub_op {
-	AWP_OP_SUB = -1,
-	AWP_OP_ADD = 1,
-};
-
 enum awp_errors {
 	AWP_OK,
 	AWP_FP_UF,
@@ -47,7 +42,8 @@ int awp_to_double(uint16_t *r, double *f);
 int awp_from_double(uint16_t *r, double f);
 
 int awp_float_norm(uint16_t *r);
-int awp_float_addsub(uint16_t *r, uint16_t *n, int op);
+int awp_float_add(uint16_t *r, uint16_t *n);
+int awp_float_sub(uint16_t *r, uint16_t *n);
 int awp_float_mul(uint16_t *r, uint16_t *n);
 int awp_float_div(uint16_t *r, uint16_t *n);
 

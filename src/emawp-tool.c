@@ -209,10 +209,10 @@ int main(int argc, char **argv)
 			awp_float_norm(n[0].r);
 			break;
 		case ADD:
-			n[0].res = awp_float_addsub(n[0].r, n[1].r+1, AWP_OP_ADD);
+			n[0].res = awp_float_add(n[0].r, n[1].r+1);
 			break;
 		case SUB:
-			n[0].res = awp_float_addsub(n[0].r, n[1].r+1, AWP_OP_SUB);
+			n[0].res = awp_float_sub(n[0].r, n[1].r+1);
 			break;
 		case MUL:
 			n[0].res = awp_float_mul(n[0].r, n[1].r+1);
