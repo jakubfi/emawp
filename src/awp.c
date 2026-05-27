@@ -211,7 +211,8 @@ int awp_dword_div(uint16_t *r, int16_t n)
 	int32_t a = DWORD(r[1], r[2]);
 
 	int64_t res = (int64_t) a / n;
-	// dirty workaround for an edge case in the H/W
+	// models documented hardware quirk: 0x7FFFFFFF / -32768 yields q=1, r=32767
+	// (verified against real hardware via em400 alu/dw-weirdness.asm)
 	if ((a == 2147483647) && (n == -32768)) {
 		res = 1;
 	}
