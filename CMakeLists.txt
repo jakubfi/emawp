@@ -7,7 +7,6 @@ project(emawp
 include(GNUInstallDirs)
 include(cmake/appversion.cmake)
 
-include_directories(${CMAKE_SOURCE_DIR}/include)
 add_compile_options(-Wall)
 
 # ---- Target: emawp-lib -------------------------------------------------
@@ -21,9 +20,16 @@ add_library(emawp-lib SHARED
 	${EMAWP_PUBLIC_HEADERS}
 )
 
+# Export header location so find_package(emawp) consumers get the include path.
+target_include_directories(emawp-lib PUBLIC
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+	$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
 set_target_properties(emawp-lib PROPERTIES
 	C_STANDARD 99
 	OUTPUT_NAME "emawp"
+	EXPORT_NAME "emawp"
 	SOVERSION ${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}
 	PUBLIC_HEADER "${EMAWP_PUBLIC_HEADERS}"
 )
